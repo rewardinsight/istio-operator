@@ -22,7 +22,7 @@
           "count": 1,
           "autoscaling": false,
           "instanceType": "n1-standard-2",
-          "preemptible": false
+          "preemptible": true
         }
       },
       "projectId": "{{projectID}}"

@@ -59,7 +59,14 @@ func (c *Cluster) reconcileEnabledServices(remoteConfig *istiov1beta1.RemoteIsti
 			ObjectMeta: templates.ObjectMeta(enabledSvc.Name, map[string]string{}, c.istioConfig),
 			Spec: apiv1.ServiceSpec{
 				ClusterIP: "None",
-				Ports:     enabledSvc.Ports,
+				Ports: []apiv1.ServicePort{
+					{
+						Name:     "placeholder",
+						Port:     65000,
+						Protocol: apiv1.ProtocolTCP,
+					},
+				},
+				// Ports:     enabledSvc.Ports,
 			},
 		}
 		err := c.reconcileService(svc)

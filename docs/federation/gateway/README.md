@@ -31,7 +31,7 @@ INFO[0004] you can check its status with the command `banzai cluster get "istio-
 Id   Name
 541  istio-pke
 
-❯ cat docs/federation/gateway/samples/istio-gke-cluster.json | sed -e "s/{{secretID}}/${GKE_SECRET_ID}/" -e | "s/{{projectID}}/${GKE_PROJECT_ID}/" banzai cluster create
+❯ cat docs/federation/gateway/samples/istio-gke-cluster.json | sed -e "s/{{secretID}}/${GKE_SECRET_ID}/" -e "s/{{projectID}}/${GKE_PROJECT_ID}/" | banzai cluster create
 INFO[0004] cluster is being created
 INFO[0004] you can check its status with the command `banzai cluster get "istio-gke"`
 Id   Name

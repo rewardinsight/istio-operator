@@ -83,7 +83,13 @@ func (c *Cluster) ReconcileEnabledServiceEndpoints(remoteConfig *istiov1beta1.Re
 			Subsets: []apiv1.EndpointSubset{
 				{
 					Addresses: addresses,
-					Ports:     ports,
+					Ports: []apiv1.EndpointPort{
+						{
+							Name:     "placeholder",
+							Port:     65000,
+							Protocol: apiv1.ProtocolTCP,
+						},
+					},
 				},
 			},
 		}

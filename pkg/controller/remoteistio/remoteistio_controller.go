@@ -18,7 +18,6 @@ package remoteistio
 
 import (
 	"context"
-	"net"
 
 	"github.com/go-logr/logr"
 	"github.com/gofrs/uuid"
@@ -250,7 +249,11 @@ func (r *ReconcileRemoteConfig) reconcile(remoteConfig *istiov1beta1.RemoteIstio
 
 	remoteConfig, err = r.populateEnabledServiceEndpoints(remoteConfig, istio, logger)
 	if err != nil {
-		return reconcile.Result{}, emperror.Wrap(err, "could not populate service endpoints")
+		log.Info(err.Error())
+		return reconcile.Result{
+			Requeue: false,
+		}, nil
+		// return reconcile.Result{}, emperror.Wrap(err, "could not populate service endpoints")
 	}
 
 	remoteConfig, err = r.populateSignCerts(remoteConfig)
@@ -400,34 +403,9 @@ func (r *ReconcileRemoteConfig) populateEnabledServiceEndpointsFlat(remoteIstio 
 
 func (r *ReconcileRemoteConfig) populateEnabledServiceEndpointsGateway(remoteIstio *istiov1beta1.RemoteIstio, istio *istiov1beta1.Istio, logger logr.Logger) (*istiov1beta1.RemoteIstio, error) {
 	var service corev1.Service
-	ips := make([]string, 0)
 
-	err := r.Get(context.TODO(), client.ObjectKey{
-		Name:      "istio-ingressgateway",
-		Namespace: remoteIstio.Namespace,
-	}, &service)
-	if err != nil && !k8serrors.IsNotFound(err) {
-		return remoteIstio, err
-	}
-
-	if len(service.Status.LoadBalancer.Ingress) < 1 {
-		return remoteIstio, errors.New("invalid ingress status")
-	}
-
-	if service.Status.LoadBalancer.Ingress[0].IP != "" {
-		ips = []string{
-			service.Status.LoadBalancer.Ingress[0].IP,
-		}
-	} else if service.Status.LoadBalancer.Ingress[0].Hostname != "" {
-		hostIPs, err := net.LookupIP(service.Status.LoadBalancer.Ingress[0].Hostname)
-		if err != nil {
-			return remoteIstio, err
-		}
-		for _, ip := range hostIPs {
-			if ip.To4() != nil {
-				ips = append(ips, ip.String())
-			}
-		}
+	if istio.Status.GatewayAddress == nil {
+		return remoteIstio, errors.New("invalid Istio ingress gateway address")
 	}
 
 	for i, svc := range remoteIstio.Spec.EnabledServices {
@@ -442,7 +420,7 @@ func (r *ReconcileRemoteConfig) populateEnabledServiceEndpointsGateway(remoteIst
 			return remoteIstio, err
 		}
 		svc.Ports = service.Spec.Ports
-		svc.IPs = ips
+		svc.IPs = istio.Status.GatewayAddress
 
 		remoteIstio.Spec.EnabledServices[i] = svc
 	}

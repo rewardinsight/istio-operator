@@ -13,6 +13,7 @@ spec:
   imagePullPolicy: Always
   pilot:
     maxReplicas: 1
+    image: "waynz0r/pilot:latest"
   gateways:
     ingress:
       maxReplicas: 1
@@ -21,3 +22,4 @@ spec:
       enabled: false
   mixer:
     maxReplicas: 1
+    image: "waynz0r/mixer:latest"
