@@ -300,6 +300,11 @@ func (r *Reconciler) envVars() []apiv1.EnvVar {
 		Value: strconv.FormatBool(util.PointerToBool(r.gw.Spec.SDS.Enabled)),
 	})
 
+	envVars = append(envVars, apiv1.EnvVar{
+		Name:  "SDS_ENABLED",
+		Value: strconv.FormatBool(util.PointerToBool(r.gw.Spec.SDS.Enabled)),
+	})
+
 	if r.Config.Spec.ClusterName != "" {
 		envVars = append(envVars, apiv1.EnvVar{
 			Name:  "ISTIO_META_CLUSTER_ID",
@@ -395,12 +400,8 @@ func (r *Reconciler) envVars() []apiv1.EnvVar {
 }
 
 func (r *Reconciler) volumeMounts() []apiv1.VolumeMount {
-	vms := []apiv1.VolumeMount{
-		{
-			Name:      "istio-certs",
-			MountPath: "/etc/certs",
-			ReadOnly:  true,
-		},
+	vms := make([]apiv1.VolumeMount, 0)
+	vms = append(vms, []apiv1.VolumeMount{
 		{
 			Name:      fmt.Sprintf("%s-certs", r.gw.Name),
 			MountPath: fmt.Sprintf("/etc/istio/%s-certs", r.gw.Spec.Type+"gateway"),
@@ -411,11 +412,24 @@ func (r *Reconciler) volumeMounts() []apiv1.VolumeMount {
 			MountPath: fmt.Sprintf("/etc/istio/%s-ca-certs", r.gw.Spec.Type+"gateway"),
 			ReadOnly:  true,
 		},
-	}
+	}...)
 	if util.PointerToBool(r.Config.Spec.SDS.Enabled) {
+		vms = append(vms, []apiv1.VolumeMount{
+			{
+				Name:      "sdsudspath",
+				MountPath: "/var/run/sds",
+				ReadOnly: true,
+			},
+			{
+				Name:      "istio-token",
+				MountPath: "/var/run/secrets/tokens",
+			},
+		}...)
+	} else {
 		vms = append(vms, apiv1.VolumeMount{
-			Name:      "istio-token",
-			MountPath: "/var/run/secrets/tokens",
+			Name:      "istio-certs",
+			MountPath: "/etc/certs",
+			ReadOnly:  true,
 		})
 	}
 	if util.PointerToBool(r.gw.Spec.SDS.Enabled) {
@@ -438,17 +452,9 @@ func (r *Reconciler) volumeMounts() []apiv1.VolumeMount {
 }
 
 func (r *Reconciler) volumes() []apiv1.Volume {
-	volumes := []apiv1.Volume{
-		{
-			Name: "istio-certs",
-			VolumeSource: apiv1.VolumeSource{
-				Secret: &apiv1.SecretVolumeSource{
-					SecretName:  fmt.Sprintf("istio.%s", r.serviceAccountName()),
-					Optional:    util.BoolPointer(true),
-					DefaultMode: util.IntPointer(420),
-				},
-			},
-		},
+	volumes := make([]apiv1.Volume, 0)
+
+	volumes = append(volumes, []apiv1.Volume{
 		{
 			Name: fmt.Sprintf("%s-certs", r.gw.Name),
 			VolumeSource: apiv1.VolumeSource{
@@ -469,6 +475,46 @@ func (r *Reconciler) volumes() []apiv1.Volume {
 				},
 			},
 		},
+	}...)
+
+	if util.PointerToBool(r.Config.Spec.SDS.Enabled) {
+		volumes = append(volumes, apiv1.Volume{
+			Name: "sdsudspath",
+			VolumeSource: apiv1.VolumeSource{
+				HostPath: &apiv1.HostPathVolumeSource{
+					Path: "/var/run/sds",
+				},
+			},
+		})
+
+		volumes = append(volumes, apiv1.Volume{
+			Name: "istio-token",
+			VolumeSource: apiv1.VolumeSource{
+				Projected: &apiv1.ProjectedVolumeSource{
+					Sources: []apiv1.VolumeProjection{
+						{
+							ServiceAccountToken: &apiv1.ServiceAccountTokenProjection{
+								Path:              "istio-token",
+								ExpirationSeconds: util.Int64Pointer(43200),
+								Audience:          r.Config.Spec.SDS.TokenAudience,
+							},
+						},
+					},
+					DefaultMode: util.IntPointer(420),
+				},
+			},
+		})
+	} else {
+		volumes = append(volumes, apiv1.Volume{
+			Name: "istio-certs",
+			VolumeSource: apiv1.VolumeSource{
+				Secret: &apiv1.SecretVolumeSource{
+					SecretName:  fmt.Sprintf("istio.%s", r.serviceAccountName()),
+					Optional:    util.BoolPointer(true),
+					DefaultMode: util.IntPointer(420),
+				},
+			},
+		})
 	}
 	if util.PointerToBool(r.gw.Spec.SDS.Enabled) {
 		volumes = append(volumes, apiv1.Volume{
