@@ -17,10 +17,11 @@ limitations under the License.
 package galley
 
 import (
-	"github.com/banzaicloud/istio-operator/pkg/util"
 	"github.com/go-logr/logr"
 	"github.com/goph/emperror"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/banzaicloud/istio-operator/pkg/util"
 
 	istiov1beta1 "github.com/banzaicloud/istio-operator/pkg/apis/istio/v1beta1"
 	"github.com/banzaicloud/istio-operator/pkg/k8sutil"
@@ -37,6 +38,7 @@ const (
 	deploymentName         = "istio-galley"
 	serviceName            = "istio-galley"
 	pdbName                = "istio-galley"
+	configMapNameEnvoy     = "galley-envoy-config"
 )
 
 var galleyLabels = map[string]string{
@@ -84,9 +86,11 @@ func (r *Reconciler) Reconcile(log logr.Logger) error {
 		{Resource: r.clusterRole, DesiredState: galleyDesiredState},
 		{Resource: r.clusterRoleBinding, DesiredState: galleyDesiredState},
 		{Resource: r.configMap, DesiredState: galleyDesiredState},
+		{Resource: r.configMapEnvoy, DesiredState: galleyDesiredState},
 		{Resource: r.deployment, DesiredState: galleyDesiredState},
 		{Resource: r.service, DesiredState: galleyDesiredState},
 		{Resource: r.podDisruptionBudget, DesiredState: pdbDesiredState},
+		{Resource: r.validatingWebhook, DesiredState: galleyDesiredState},
 	}
 
 	for _, res := range resources {

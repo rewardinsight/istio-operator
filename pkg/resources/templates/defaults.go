@@ -19,10 +19,11 @@ package templates
 import (
 	"strconv"
 
-	"github.com/banzaicloud/istio-operator/pkg/apis/istio/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalev2beta1 "k8s.io/api/autoscaling/v2beta1"
 	apiv1 "k8s.io/api/core/v1"
+
+	"github.com/banzaicloud/istio-operator/pkg/apis/istio/v1beta1"
 
 	"github.com/banzaicloud/istio-operator/pkg/util"
 )
@@ -65,14 +66,14 @@ func TargetAvgCpuUtil80() []autoscalev2beta1.MetricSpec {
 
 func IstioProxyEnv(config *v1beta1.Istio) []apiv1.EnvVar {
 	envs := []apiv1.EnvVar{
-		{
-			Name:  "JWT_POLICY",
-			Value: string(config.Spec.JWTPolicy),
-		},
-		{
-			Name:  "PILOT_CERT_PROVIDER",
-			Value: string(config.Spec.PilotCertProvider),
-		},
+		// {
+		// 	Name:  "JWT_POLICY",
+		// 	Value: string(config.Spec.JWTPolicy),
+		// },
+		// {
+		// 	Name:  "PILOT_CERT_PROVIDER",
+		// 	Value: string(config.Spec.PilotCertProvider),
+		// },
 		{
 			Name: "POD_NAME",
 			ValueFrom: &apiv1.EnvVarSource{

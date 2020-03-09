@@ -32,7 +32,7 @@ func (c *Cluster) reconcileComponents(remoteConfig *istiov1beta1.RemoteIstio, is
 	c.log.Info("reconciling components")
 
 	reconcilers := []resources.ComponentReconciler{
-		base.New(c.ctrlRuntimeClient, c.istioConfig),
+		base.New(c.ctrlRuntimeClient, c.istioConfig, true),
 		citadel.New(citadel.Configuration{
 			DeployMeshPolicy: false,
 		}, c.ctrlRuntimeClient, c.dynamicClient, c.istioConfig),

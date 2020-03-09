@@ -90,6 +90,7 @@ func (r *Reconciler) deployment() runtime.Object {
 		"--serviceCluster", r.gw.Name,
 		"--proxyAdminPort", "15000",
 		"--statusPort", "15020",
+		"--pilotIdentity", "ns/istio-system/sa/istiod-service-account",
 		"--controlPlaneAuthPolicy", templates.ControlPlaneAuthPolicy(util.PointerToBool(r.Config.Spec.Istiod.Enabled), r.Config.Spec.ControlPlaneSecurityEnabled),
 		"--discoveryAddress", r.discoveryAddress(),
 		"--trust-domain", r.Config.Spec.TrustDomain,
@@ -438,13 +439,13 @@ func (r *Reconciler) volumeMounts() []apiv1.VolumeMount {
 		})
 	}
 
-	if util.PointerToBool(r.Config.Spec.MountMtlsCerts) {
-		vms = append(vms, apiv1.VolumeMount{
-			Name:      "istio-certs",
-			MountPath: "/etc/certs",
-			ReadOnly:  true,
-		})
-	}
+	// if util.PointerToBool(r.Config.Spec.MountMtlsCerts) {
+	vms = append(vms, apiv1.VolumeMount{
+		Name:      "istio-certs",
+		MountPath: "/etc/certs",
+		ReadOnly:  true,
+	})
+	// }
 
 	vms = append(vms, apiv1.VolumeMount{
 		Name:      "podinfo",
@@ -516,45 +517,47 @@ func (r *Reconciler) volumes() []apiv1.Volume {
 		},
 	})
 
-	if r.gw.Spec.Type == istiov1beta1.GatewayTypeIngress && (util.PointerToBool(r.Config.Spec.Istiod.Enabled) || util.PointerToBool(r.gw.Spec.SDS.Enabled)) {
-		volumes = append(volumes, apiv1.Volume{
-			Name: "ingressgatewaysdsudspath",
-			VolumeSource: apiv1.VolumeSource{
-				EmptyDir: &apiv1.EmptyDirVolumeSource{},
-			},
-		})
-	}
+	if r.gw.Spec.Type == istiov1beta1.GatewayTypeIngress {
+		if util.PointerToBool(r.Config.Spec.Istiod.Enabled) || util.PointerToBool(r.gw.Spec.SDS.Enabled) {
+			volumes = append(volumes, apiv1.Volume{
+				Name: "ingressgatewaysdsudspath",
+				VolumeSource: apiv1.VolumeSource{
+					EmptyDir: &apiv1.EmptyDirVolumeSource{},
+				},
+			})
+		}
 
-	if util.PointerToBool(r.Config.Spec.Istiod.Enabled) && r.Config.Spec.JWTPolicy == istiov1beta1.JWTPolicyThirdPartyJWT {
-		volumes = append(volumes, apiv1.Volume{
-			Name: "istio-token",
-			VolumeSource: apiv1.VolumeSource{
-				Projected: &apiv1.ProjectedVolumeSource{
-					Sources: []apiv1.VolumeProjection{
-						{
-							ServiceAccountToken: &apiv1.ServiceAccountTokenProjection{
-								Audience:          r.Config.Spec.SDS.TokenAudience,
-								ExpirationSeconds: util.Int64Pointer(43200),
-								Path:              "istio-token",
+		if (util.PointerToBool(r.Config.Spec.Istiod.Enabled) && r.Config.Spec.JWTPolicy == istiov1beta1.JWTPolicyThirdPartyJWT) || util.PointerToBool(r.gw.Spec.SDS.Enabled) {
+			volumes = append(volumes, apiv1.Volume{
+				Name: "istio-token",
+				VolumeSource: apiv1.VolumeSource{
+					Projected: &apiv1.ProjectedVolumeSource{
+						Sources: []apiv1.VolumeProjection{
+							{
+								ServiceAccountToken: &apiv1.ServiceAccountTokenProjection{
+									Audience:          r.Config.Spec.SDS.TokenAudience,
+									ExpirationSeconds: util.Int64Pointer(43200),
+									Path:              "istio-token",
+								},
 							},
 						},
 					},
 				},
-			},
-		})
+			})
+		}
 	}
 
-	if util.PointerToBool(r.Config.Spec.MountMtlsCerts) {
-		volumes = append(volumes, apiv1.Volume{
-			Name: "istio-certs",
-			VolumeSource: apiv1.VolumeSource{
-				Secret: &apiv1.SecretVolumeSource{
-					SecretName: "istio.default",
-					Optional:   util.BoolPointer(true),
-				},
+	// if util.PointerToBool(r.Config.Spec.MountMtlsCerts) {
+	volumes = append(volumes, apiv1.Volume{
+		Name: "istio-certs",
+		VolumeSource: apiv1.VolumeSource{
+			Secret: &apiv1.SecretVolumeSource{
+				SecretName: "istio.default",
+				Optional:   util.BoolPointer(true),
 			},
-		})
-	}
+		},
+	})
+	// }
 
 	return volumes
 }

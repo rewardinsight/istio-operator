@@ -301,7 +301,7 @@ func (r *ReconcileIstio) reconcile(logger logr.Logger, config *istiov1beta1.Isti
 	}
 
 	reconcilers := []resources.ComponentReconciler{
-		base.New(r.Client, config),
+		base.New(r.Client, config, false),
 		citadel.New(citadel.Configuration{
 			DeployMeshPolicy: true,
 		}, r.Client, r.dynamic, config),

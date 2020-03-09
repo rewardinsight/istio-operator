@@ -50,49 +50,7 @@ func (r *Reconciler) deployment() runtime.Object {
 				},
 				Spec: apiv1.PodSpec{
 					ServiceAccountName: serviceAccountName,
-					Containers: []apiv1.Container{
-						{
-							Name:            "galley",
-							Image:           util.PointerToString(r.Config.Spec.Galley.Image),
-							ImagePullPolicy: r.Config.Spec.ImagePullPolicy,
-							Ports: []apiv1.ContainerPort{
-								{
-									ContainerPort: 9443,
-									Protocol:      apiv1.ProtocolTCP,
-								},
-								{
-									ContainerPort: 15014,
-									Protocol:      apiv1.ProtocolTCP,
-								},
-								{
-									ContainerPort: 9901,
-									Protocol:      apiv1.ProtocolTCP,
-								},
-							},
-							Command: []string{"/usr/local/bin/galley"},
-							Args:    r.containerArgs(),
-							SecurityContext: &apiv1.SecurityContext{
-								RunAsUser:    util.Int64Pointer(1337),
-								RunAsGroup:   util.Int64Pointer(1337),
-								RunAsNonRoot: util.BoolPointer(true),
-								Capabilities: &apiv1.Capabilities{
-									Drop: []apiv1.Capability{
-										"ALL",
-									},
-								},
-							},
-							VolumeMounts:   r.volumeMounts(),
-							LivenessProbe:  r.galleyProbe("/tmp/healthliveness"),
-							ReadinessProbe: r.galleyProbe("/tmp/healthready"),
-							Resources: templates.GetResourcesRequirementsOrDefault(
-								r.Config.Spec.Galley.Resources,
-								r.Config.Spec.DefaultResources,
-							),
-							Env:                      r.containerEnvs(),
-							TerminationMessagePath:   apiv1.TerminationMessagePathDefault,
-							TerminationMessagePolicy: apiv1.TerminationMessageReadFile,
-						},
-					},
+					Containers: r.containers(),
 					SecurityContext: &apiv1.PodSecurityContext{
 						FSGroup: util.Int64Pointer(1337),
 					},
@@ -104,6 +62,118 @@ func (r *Reconciler) deployment() runtime.Object {
 			},
 		},
 	}
+}
+
+func (r *Reconciler) containers() []apiv1.Container {
+	galleyContainer := apiv1.Container{
+		Name:            "galley",
+		Image:           util.PointerToString(r.Config.Spec.Galley.Image),
+		ImagePullPolicy: r.Config.Spec.ImagePullPolicy,
+		Ports: []apiv1.ContainerPort{
+			{
+				ContainerPort: 9443,
+				Protocol:      apiv1.ProtocolTCP,
+			},
+			{
+				ContainerPort: 15014,
+				Protocol:      apiv1.ProtocolTCP,
+			},
+			{
+				ContainerPort: 9901,
+				Protocol:      apiv1.ProtocolTCP,
+			},
+		},
+		Command: []string{"/usr/local/bin/galley"},
+		Args:    r.containerArgs(),
+		SecurityContext: &apiv1.SecurityContext{
+			RunAsUser:    util.Int64Pointer(1337),
+			RunAsGroup:   util.Int64Pointer(1337),
+			RunAsNonRoot: util.BoolPointer(true),
+			Capabilities: &apiv1.Capabilities{
+				Drop: []apiv1.Capability{
+					"ALL",
+				},
+			},
+		},
+		VolumeMounts:   r.volumeMounts(),
+		LivenessProbe:  r.galleyProbe("/tmp/healthliveness"),
+		ReadinessProbe: r.galleyProbe("/tmp/healthready"),
+		Resources: templates.GetResourcesRequirementsOrDefault(
+			r.Config.Spec.Galley.Resources,
+			r.Config.Spec.DefaultResources,
+		),
+		Env:                      r.containerEnvs(),
+		TerminationMessagePath:   apiv1.TerminationMessagePathDefault,
+		TerminationMessagePolicy: apiv1.TerminationMessageReadFile,
+	}
+
+	containers := []apiv1.Container{
+		galleyContainer,
+	}
+
+	args := []string{
+		"proxy",
+		"--serviceCluster",
+		"istio-galley",
+		"--templateFile",
+		"/var/lib/envoy/envoy.yaml.tmpl",
+		"--controlPlaneAuthPolicy",
+		templates.ControlPlaneAuthPolicy(util.PointerToBool(r.Config.Spec.Istiod.Enabled), r.Config.Spec.ControlPlaneSecurityEnabled),
+		"--trust-domain",
+		r.Config.Spec.TrustDomain,
+	}
+	if r.Config.Spec.Proxy.LogLevel != "" {
+		args = append(args, fmt.Sprintf("--proxyLogLevel=%s", r.Config.Spec.Proxy.LogLevel))
+	}
+	if r.Config.Spec.Proxy.ComponentLogLevel != "" {
+		args = append(args, fmt.Sprintf("--proxyComponentLogLevel=%s", r.Config.Spec.Proxy.ComponentLogLevel))
+	}
+	if r.Config.Spec.Logging.Level != nil {
+		args = append(args, fmt.Sprintf("--log_output_level=%s", util.PointerToString(r.Config.Spec.Logging.Level)))
+	}
+
+	if r.Config.Spec.ControlPlaneSecurityEnabled && !util.PointerToBool(r.Config.Spec.Istiod.Enabled) {
+		proxyContainer := apiv1.Container{
+			Name:            "istio-proxy",
+			Image:           r.Config.Spec.Proxy.Image,
+			ImagePullPolicy: r.Config.Spec.ImagePullPolicy,
+			Ports: []apiv1.ContainerPort{
+				{ContainerPort: 9902, Protocol: apiv1.ProtocolTCP},
+			},
+			Args: args,
+			Env:  templates.IstioProxyEnv(r.Config),
+			Resources: templates.GetResourcesRequirementsOrDefault(
+				r.Config.Spec.Proxy.Resources,
+				r.Config.Spec.DefaultResources,
+			),
+			VolumeMounts:             r.proxyVolumeMounts(),
+			TerminationMessagePath:   apiv1.TerminationMessagePathDefault,
+			TerminationMessagePolicy: apiv1.TerminationMessageReadFile,
+		}
+
+		containers = append(containers, proxyContainer)
+	}
+
+	return containers
+}
+
+func (r *Reconciler) proxyVolumeMounts() []apiv1.VolumeMount {
+	vms := []apiv1.VolumeMount{
+		{
+			Name:      "envoy-config",
+			MountPath: "/var/lib/envoy",
+		},
+	}
+
+	if r.Config.Spec.ControlPlaneSecurityEnabled {
+		vms = append(vms, apiv1.VolumeMount{
+			Name:      "istio-certs",
+			MountPath: "/etc/certs",
+			ReadOnly:  true,
+		})
+	}
+
+	return vms
 }
 
 func (r *Reconciler) containerEnvs() []apiv1.EnvVar {
@@ -237,7 +307,7 @@ func (r *Reconciler) volumes() []apiv1.Volume {
 			VolumeSource: apiv1.VolumeSource{
 				ConfigMap: &apiv1.ConfigMapVolumeSource{
 					LocalObjectReference: apiv1.LocalObjectReference{
-						Name: "istio-mesh-galley",
+						Name: configMapName,
 					},
 					DefaultMode: util.IntPointer(420),
 				},

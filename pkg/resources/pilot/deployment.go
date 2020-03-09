@@ -20,13 +20,14 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/banzaicloud/istio-operator/pkg/apis/istio/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	"github.com/banzaicloud/istio-operator/pkg/apis/istio/v1beta1"
 
 	"github.com/banzaicloud/istio-operator/pkg/k8sutil"
 	"github.com/banzaicloud/istio-operator/pkg/resources/templates"
@@ -54,7 +55,7 @@ func (r *Reconciler) containerArgs() []string {
 		containerArgs = append(containerArgs, fmt.Sprintf("--log_output_level=%s", util.PointerToString(r.Config.Spec.Logging.Level)))
 	}
 
-	if r.Config.Spec.ControlPlaneSecurityEnabled && !util.PointerToBool(r.Config.Spec.Istiod.Enabled) {
+	if r.Config.Spec.ControlPlaneSecurityEnabled && util.PointerToBool(r.Config.Spec.Istiod.Enabled) {
 		containerArgs = append(containerArgs, "--secureGrpcAddr", ":15011")
 	} else {
 		containerArgs = append(containerArgs, "--secureGrpcAddr", "")
@@ -73,14 +74,14 @@ func (r *Reconciler) containerArgs() []string {
 
 func (r *Reconciler) containerEnvs() []apiv1.EnvVar {
 	envs := []apiv1.EnvVar{
-		{
-			Name:  "JWT_POLICY",
-			Value: string(r.Config.Spec.JWTPolicy),
-		},
-		{
-			Name:  "PILOT_CERT_PROVIDER",
-			Value: string(r.Config.Spec.PilotCertProvider),
-		},
+		// {
+		// 	Name:  "JWT_POLICY",
+		// 	Value: string(r.Config.Spec.JWTPolicy),
+		// },
+		// {
+		// 	Name:  "PILOT_CERT_PROVIDER",
+		// 	Value: string(r.Config.Spec.PilotCertProvider),
+		// },
 		{
 			Name: "POD_NAME",
 			ValueFrom: &apiv1.EnvVarSource{
@@ -119,18 +120,18 @@ func (r *Reconciler) containerEnvs() []apiv1.EnvVar {
 			Name:  "PILOT_ENABLE_PROTOCOL_SNIFFING_FOR_INBOUND",
 			Value: strconv.FormatBool(util.PointerToBool(r.Config.Spec.Pilot.EnableProtocolSniffingInbound)),
 		},
-		{
-			Name:  "INJECTION_WEBHOOK_CONFIG_NAME",
-			Value: "istio-sidecar-injector",
-		},
-		{
-			Name:  "ISTIOD_ADDR",
-			Value: fmt.Sprintf("istiod-%s.svc:15012", r.Config.Namespace),
-		},
-		{
-			Name:  "PILOT_EXTERNAL_GALLEY",
-			Value: "false",
-		},
+		// {
+		// 	Name:  "INJECTION_WEBHOOK_CONFIG_NAME",
+		// 	Value: "istio-sidecar-injector",
+		// },
+		// {
+		// 	Name:  "ISTIOD_ADDR",
+		// 	Value: fmt.Sprintf("istiod-%s.svc:15012", r.Config.Namespace),
+		// },
+		// {
+		// 	Name:  "PILOT_EXTERNAL_GALLEY",
+		// 	Value: "false",
+		// },
 	}
 
 	if r.Config.Spec.LocalityLB != nil && util.PointerToBool(r.Config.Spec.LocalityLB.Enabled) {
@@ -149,24 +150,39 @@ func (r *Reconciler) containerPorts() []apiv1.ContainerPort {
 	return []apiv1.ContainerPort{
 		{ContainerPort: 8080, Protocol: apiv1.ProtocolTCP},
 		{ContainerPort: 15010, Protocol: apiv1.ProtocolTCP},
-		{ContainerPort: 15017, Protocol: apiv1.ProtocolTCP},
+		// {ContainerPort: 15017, Protocol: apiv1.ProtocolTCP},
 	}
 }
 
 func (r *Reconciler) proxyVolumeMounts() []apiv1.VolumeMount {
-	vms := []apiv1.VolumeMount{
-		{
-			Name:      "pilot-envoy-config",
-			MountPath: "/var/lib/envoy",
-		},
-	}
+	vms := make([]apiv1.VolumeMount, 0)
+	// vms := []apiv1.VolumeMount{
+	// 	{
+	// 		Name:      "pilot-envoy-config",
+	// 		MountPath: "/var/lib/envoy",
+	// 	},
+	// }
 
-	if r.Config.Spec.ControlPlaneSecurityEnabled && util.PointerToBool(r.Config.Spec.MountMtlsCerts) {
+	if r.Config.Spec.ControlPlaneSecurityEnabled {
 		vms = append(vms, apiv1.VolumeMount{
 			Name:      "istio-certs",
 			MountPath: "/etc/certs",
 			ReadOnly:  true,
 		})
+	}
+
+	if util.PointerToBool(r.Config.Spec.SDS.Enabled) {
+		vms = append(vms, []apiv1.VolumeMount{
+			{
+				Name:      "sds-uds-path",
+				MountPath: "/var/run/sds",
+				ReadOnly:  true,
+			},
+			{
+				Name:      "istio-token",
+				MountPath: "/var/run/secrets/tokens",
+			},
+		}...)
 	}
 
 	return vms
@@ -222,7 +238,7 @@ func (r *Reconciler) containers() []apiv1.Container {
 		"--serviceCluster",
 		"istio-pilot",
 		"--templateFile",
-		"/var/lib/envoy/envoy.yaml.tmpl",
+		"/etc/istio/proxy/envoy_pilot.yaml.tmpl",
 		"--controlPlaneAuthPolicy",
 		templates.ControlPlaneAuthPolicy(util.PointerToBool(r.Config.Spec.Istiod.Enabled), r.Config.Spec.ControlPlaneSecurityEnabled),
 		"--domain",
@@ -246,6 +262,9 @@ func (r *Reconciler) containers() []apiv1.Container {
 			Image:           r.Config.Spec.Proxy.Image,
 			ImagePullPolicy: r.Config.Spec.ImagePullPolicy,
 			Ports: []apiv1.ContainerPort{
+				{ContainerPort: 15003, Protocol: apiv1.ProtocolTCP},
+				{ContainerPort: 15005, Protocol: apiv1.ProtocolTCP},
+				{ContainerPort: 15007, Protocol: apiv1.ProtocolTCP},
 				{ContainerPort: 15011, Protocol: apiv1.ProtocolTCP},
 			},
 			Args: args,
@@ -310,13 +329,55 @@ func (r *Reconciler) volumeMounts() []apiv1.VolumeMount {
 				ReadOnly:  true,
 			},
 		}...)
+	} else {
+		vms = append(vms, []apiv1.VolumeMount{
+			{
+				Name:      "istio-certs",
+				MountPath: "/etc/certs",
+				ReadOnly:  true,
+			},
+		}...)
 	}
 
 	return vms
 }
 
 func (r *Reconciler) volumes() []apiv1.Volume {
-	volumes := []apiv1.Volume{
+	volumes := make([]apiv1.Volume, 0)
+
+	hostPathType := apiv1.HostPathUnset
+	if util.PointerToBool(r.Config.Spec.SDS.Enabled) {
+		volumes = append(volumes, apiv1.Volume{
+			Name: "sds-uds-path",
+			VolumeSource: apiv1.VolumeSource{
+				HostPath: &apiv1.HostPathVolumeSource{
+					Path: "/var/run/sds",
+					Type: &hostPathType,
+				},
+			},
+		})
+	}
+
+	if r.Config.Spec.JWTPolicy == v1beta1.JWTPolicyThirdPartyJWT {
+		volumes = append(volumes, apiv1.Volume{
+			Name: "istio-token",
+			VolumeSource: apiv1.VolumeSource{
+				Projected: &apiv1.ProjectedVolumeSource{
+					Sources: []apiv1.VolumeProjection{
+						{
+							ServiceAccountToken: &apiv1.ServiceAccountTokenProjection{
+								Audience:          r.Config.Spec.SDS.TokenAudience,
+								ExpirationSeconds: util.Int64Pointer(43200),
+								Path:              "istio-token",
+							},
+						},
+					},
+				},
+			},
+		})
+	}
+
+	volumes = append(volumes, []apiv1.Volume{
 		{
 			Name: "config-volume",
 			VolumeSource: apiv1.VolumeSource{
@@ -328,18 +389,18 @@ func (r *Reconciler) volumes() []apiv1.Volume {
 				},
 			},
 		},
-		{
-			Name: "pilot-envoy-config",
-			VolumeSource: apiv1.VolumeSource{
-				ConfigMap: &apiv1.ConfigMapVolumeSource{
-					LocalObjectReference: apiv1.LocalObjectReference{
-						Name: configMapNameEnvoy,
-					},
-					DefaultMode: util.IntPointer(420),
-				},
-			},
-		},
-	}
+		// {
+		// 	Name: "pilot-envoy-config",
+		// 	VolumeSource: apiv1.VolumeSource{
+		// 		ConfigMap: &apiv1.ConfigMapVolumeSource{
+		// 			LocalObjectReference: apiv1.LocalObjectReference{
+		// 				Name: configMapNameEnvoy,
+		// 			},
+		// 			DefaultMode: util.IntPointer(420),
+		// 		},
+		// 	},
+		// },
+	}...)
 
 	if util.PointerToBool(r.Config.Spec.Istiod.Enabled) {
 		volumes = append(volumes, apiv1.Volume{
@@ -350,25 +411,6 @@ func (r *Reconciler) volumes() []apiv1.Volume {
 				},
 			},
 		})
-
-		if r.Config.Spec.JWTPolicy == v1beta1.JWTPolicyThirdPartyJWT {
-			volumes = append(volumes, apiv1.Volume{
-				Name: "istio-token",
-				VolumeSource: apiv1.VolumeSource{
-					Projected: &apiv1.ProjectedVolumeSource{
-						Sources: []apiv1.VolumeProjection{
-							{
-								ServiceAccountToken: &apiv1.ServiceAccountTokenProjection{
-									Audience:          r.Config.Spec.SDS.TokenAudience,
-									ExpirationSeconds: util.Int64Pointer(43200),
-									Path:              "istio-token",
-								},
-							},
-						},
-					},
-				},
-			})
-		}
 
 		volumes = append(volumes, []apiv1.Volume{
 			{
@@ -408,18 +450,18 @@ func (r *Reconciler) volumes() []apiv1.Volume {
 		}...)
 	}
 
-	if r.Config.Spec.ControlPlaneSecurityEnabled && util.PointerToBool(r.Config.Spec.MountMtlsCerts) {
-		volumes = append(volumes, apiv1.Volume{
-			Name: "istio-certs",
-			VolumeSource: apiv1.VolumeSource{
-				Secret: &apiv1.SecretVolumeSource{
-					SecretName:  fmt.Sprintf("istio.%s", serviceAccountName),
-					Optional:    util.BoolPointer(true),
-					DefaultMode: util.IntPointer(420),
-				},
+	// if r.Config.Spec.ControlPlaneSecurityEnabled && util.PointerToBool(r.Config.Spec.MountMtlsCerts) {
+	volumes = append(volumes, apiv1.Volume{
+		Name: "istio-certs",
+		VolumeSource: apiv1.VolumeSource{
+			Secret: &apiv1.SecretVolumeSource{
+				SecretName:  fmt.Sprintf("istio.%s", serviceAccountName),
+				Optional:    util.BoolPointer(true),
+				DefaultMode: util.IntPointer(420),
 			},
-		})
-	}
+		},
+	})
+	// }
 
 	return volumes
 }

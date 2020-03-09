@@ -114,27 +114,19 @@ func (r *Reconciler) Reconcile(log logr.Logger) error {
 	}
 
 	var istiodDesiredState k8sutil.DesiredState
-	var galleyDesiredState k8sutil.DesiredState
 	if util.PointerToBool(r.Config.Spec.Istiod.Enabled) {
 		istiodDesiredState = k8sutil.DesiredStatePresent
-		if !util.PointerToBool(r.Config.Spec.Galley.Enabled) {
-			galleyDesiredState = k8sutil.DesiredStatePresent
-		} else {
-			galleyDesiredState = k8sutil.DesiredStateAbsent
-		}
 	} else {
 		istiodDesiredState = k8sutil.DesiredStateAbsent
-		galleyDesiredState = k8sutil.DesiredStateAbsent
 	}
 
 	for _, res := range []resources.ResourceWithDesiredState{
 		{Resource: r.serviceAccount, DesiredState: pilotDesiredState},
 		{Resource: r.clusterRole, DesiredState: pilotDesiredState},
 		{Resource: r.clusterRoleIstiod, DesiredState: pilotDesiredState},
-		{Resource: r.clusterRoleGalley, DesiredState: galleyDesiredState},
 		{Resource: r.clusterRoleBinding, DesiredState: pilotDesiredState},
 		{Resource: r.clusterRoleBindingIstiod, DesiredState: istiodDesiredState},
-		{Resource: r.configMap, DesiredState: istiodDesiredState},
+		// {Resource: r.configMap, DesiredState: istiodDesiredState},
 		{Resource: r.configMapInjector, DesiredState: istiodDesiredState},
 		{Resource: r.configMapEnvoy, DesiredState: pilotDesiredState},
 		{Resource: r.deployment, DesiredState: pilotDesiredState},
@@ -142,9 +134,8 @@ func (r *Reconciler) Reconcile(log logr.Logger) error {
 		{Resource: r.serviceIstiod, DesiredState: istiodDesiredState},
 		{Resource: r.horizontalPodAutoscaler, DesiredState: pilotDesiredState},
 		{Resource: r.podDisruptionBudget, DesiredState: pdbDesiredState},
-		{Resource: r.mutatingWebhook, DesiredState: istiodDesiredState},
+		// {Resource: r.mutatingWebhook, DesiredState: istiodDesiredState},
 		{Resource: r.validatingWebhook, DesiredState: pilotDesiredState},
-		{Resource: r.validatingWebhookGalley, DesiredState: istiodDesiredState},
 	} {
 		o := res.Resource()
 		err := k8sutil.Reconcile(log, r.Client, o, res.DesiredState)

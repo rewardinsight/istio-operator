@@ -40,6 +40,9 @@ func (gw *MeshGateway) SetDefaults() {
 	if gw.Spec.Type == GatewayTypeEgress && gw.Spec.ServiceType == "" {
 		gw.Spec.ServiceType = defaultEgressGatewayServiceType
 	}
+	if gw.Spec.SDS.Image == "" {
+		gw.Spec.SDS.Image = defaultSDSImage
+	}
 	// always turn off SDS for egress
 	if gw.Spec.Type == GatewayTypeEgress {
 		gw.Spec.SDS.Enabled = util.BoolPointer(false)

@@ -28,6 +28,7 @@ import (
 
 const (
 	componentName                 = "common"
+	IstioConfigMapName            = "istio"
 	istioReaderName               = "istio-reader"
 	istioReaderServiceAccountName = istioReaderName + "-service-account"
 )
@@ -38,14 +39,16 @@ var istioReaderLabel = map[string]string{
 
 type Reconciler struct {
 	resources.Reconciler
+	remote bool
 }
 
-func New(client client.Client, config *istiov1beta1.Istio) *Reconciler {
+func New(client client.Client, config *istiov1beta1.Istio, isRemote bool) *Reconciler {
 	return &Reconciler{
 		Reconciler: resources.Reconciler{
 			Client: client,
 			Config: config,
 		},
+		remote: isRemote,
 	}
 }
 
@@ -55,6 +58,7 @@ func (r *Reconciler) Reconcile(log logr.Logger) error {
 	log.Info("Reconciling")
 
 	for _, res := range []resources.Resource{
+		r.configMap,
 		r.serviceAccount,
 		r.clusterRole,
 		r.clusterRoleBinding,

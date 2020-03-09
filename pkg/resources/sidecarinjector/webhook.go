@@ -39,7 +39,7 @@ func (r *Reconciler) webhook() runtime.Object {
 						Namespace: r.Config.Namespace,
 						Path:      util.StrPointer("/inject"),
 					},
-					CABundle: nil,
+					CABundle: []byte{},
 				},
 				Rules: []admissionv1beta1.RuleWithOperations{
 					{
@@ -49,7 +49,7 @@ func (r *Reconciler) webhook() runtime.Object {
 						Rule: admissionv1beta1.Rule{
 							Resources:   []string{"pods"},
 							APIGroups:   []string{""},
-							APIVersions: []string{"*"},
+							APIVersions: []string{"v1"},
 						},
 					},
 				},
@@ -76,6 +76,14 @@ func (r *Reconciler) webhook() runtime.Object {
 					Key:      "istio-injection",
 					Operator: metav1.LabelSelectorOpNotIn,
 					Values:   []string{"disabled"},
+				},
+				{
+					Key:      "istio-env",
+					Operator: metav1.LabelSelectorOpDoesNotExist,
+				},
+				{
+					Key:      "istio.io/rev",
+					Operator: metav1.LabelSelectorOpDoesNotExist,
 				},
 			},
 		}
