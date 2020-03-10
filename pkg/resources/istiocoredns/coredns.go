@@ -68,7 +68,7 @@ func (r *Reconciler) reconcileCoreDNSConfigMap(log logr.Logger, desiredState k8s
 		Body: [][]interface{}{
 			{"errors"},
 			{"cache", "30"},
-			{"proxy", ".", clusterIP},
+			{"forward", ".", clusterIP},
 		},
 	}
 
