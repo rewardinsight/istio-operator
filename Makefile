@@ -1,6 +1,6 @@
 # Image URL to use all building/pushing image targets
-TAG ?= $(shell git describe --tags --abbrev=0 --match '[0-9].*[0-9].*[0-9]' 2>/dev/null )
-IMG ?= banzaicloud/istio-operator:$(TAG)
+TAG ?=  0.4.11 #$(shell git describe --tags --abbrev=0 --match '[0-9].*[0-9].*[0-9]' 2>/dev/null )
+IMG ?= rewardinsight/istio-operator:$(TAG)
 
 RELEASE_TYPE ?= p
 RELEASE_MSG ?= "operator release"
